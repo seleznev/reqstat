@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import os
+import sys
+import json
+import re
+import argparse
+import socket
+
+# 5.128.37.112 - - [13/Oct/2017:16:13:09 +0300] "GET / HTTP/1.1" 304 0 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:58.0) Gecko/20100101 Firefox/58.0"
+
+# log_format combined '$remote_addr - $remote_user [$time_local] '
+#                     '"$request" $status $body_bytes_sent '
+#                     '"$http_referer" "$http_user_agent"';
+
+LOG_FORMAT = re.compile(
+    "^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) "\
+    "\[(?P<time_local>[^\s]+ [^\s]+)\] "\
+    "\"(?P<request_method>[A-Z_]+) (?P<request_uri>[^\"]+) HTTP/[^\"]+\" "\
+    "(?P<status>[\d]+) (?P<body_bytes_sent>[\d]+) "\
+    "\"(?P<http_referer>[^\"]*)\" \"(?P<http_user_agent>.*)\"$"
+)
+
+def print_error(*message):
+    print("{}: {}" .format(os.path.basename(__file__),
+                           ": ".join(list(message))),
+                           file=sys.stderr)
+
+def parse(line):
+    r = re.search(LOG_FORMAT, line)
+    if r:
+        return int(r.group("status"))
+    else:
+        raise ValueError("parsing error: {}".format(line))
+
+def get_key(status):
+    if status >= 200 and status <= 299:
+        return "2XX"
+    elif status >= 300 and status <= 399:
+        return "3XX"
+    elif status >= 400 and status < 499:
+        return "4XX"
+    elif status == 499:
+        return "499"
+    elif status >= 500 and status <= 599:
+        return "5XX"
+    else:
+        return "unknown"
+
+def format_stats(stats):
+    json.encoder.FLOAT_REPR = lambda o: format(o, '.2f')
+
+    return json.dumps(stats, indent=4, sort_keys=False)
+
+def print_stats(stats):
+    print(format_stats(stats))
+
+def write_stats(stats, path="./stats.json"):
+    with open(path, "w") as f:
+        f.write(format_stats(stats))
+        f.write("\n")
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
+                        help="print program version")
+    parser.add_argument("--port", metavar="PORT", type=int,
+                        help="port for listening syslog messages")
+    parser.add_argument("-o", "--output", metavar="STATS",
+                        help="path to stats file")
+    args = parser.parse_args()
+
+    stats = {
+        "2XX": 0,
+        "3XX": 0,
+        "4XX": 0,
+        "499": 0,
+        "5XX": 0,
+        "unknown": 0
+    }
+
+    if args.port:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", args.port))
+
+    while True:
+        try:
+            if args.port:
+                data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+
+                r = re.search(re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<line>.*)$"),
+                              data.decode("utf-8"))
+                if r:
+                    line = r.group("line")
+                else:
+                    raise ValueError("parsing error: {}".format(data))
+            else:
+                line = input()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            sys.exit()
+
+        try:
+            status = parse(line)
+        except ValueError as e:
+            status = 400 # FIXME
+            print(e)
+
+        stats[get_key(status)] += 1 # TODO: multiple keys
+
+        if args.output:
+            write_stats(stats, args.output)
+        else:
+            print_stats(stats)
+
+if __name__ == "__main__":
+    main()
