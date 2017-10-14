@@ -21,12 +21,16 @@ import re
 import argparse
 import socket
 
+import queue
+from multiprocessing.pool import ThreadPool
+
 # 5.128.37.112 - - [13/Oct/2017:16:13:09 +0300] "GET / HTTP/1.1" 304 0 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:58.0) Gecko/20100101 Firefox/58.0"
 
 # log_format combined '$remote_addr - $remote_user [$time_local] '
 #                     '"$request" $status $body_bytes_sent '
 #                     '"$http_referer" "$http_user_agent"';
 
+THREADS_COUNT = 4
 LOG_FORMAT = re.compile(
     "^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) "\
     "\[(?P<time_local>[^\s]+ [^\s]+)\] "\
@@ -39,13 +43,6 @@ def print_error(*message):
     print("{}: {}" .format(os.path.basename(__file__),
                            ": ".join(list(message))),
                            file=sys.stderr)
-
-def parse(line):
-    r = re.search(LOG_FORMAT, line)
-    if r:
-        return int(r.group("status"))
-    else:
-        raise ValueError("parsing error: {}".format(line))
 
 def get_key(status):
     if status >= 200 and status <= 299:
@@ -60,6 +57,43 @@ def get_key(status):
         return "5XX"
     else:
         return "unknown"
+
+def parse_log_entry(line):
+    r = re.search(LOG_FORMAT, line)
+    if r:
+        return int(r.group("status"))
+    else:
+        raise ValueError("parsing error: {}".format(line))
+
+def process_syslog_messages(q):
+    stats = {
+        "2XX": 0,
+        "3XX": 0,
+        "4XX": 0,
+        "499": 0,
+        "5XX": 0,
+        "unknown": 0
+    }
+
+    while True:
+        item = q.get()
+
+        if item is None:
+            break
+
+        r = re.search(re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<line>.*)$"),
+                      item.decode("utf-8"))
+        if r:
+            line = r.group("line")
+        else:
+            raise ValueError("parsing error: {}".format(item))
+
+        status = parse_log_entry(line)
+        stats[get_key(status)] += 1
+
+        q.task_done()
+
+    return stats;
 
 def format_stats(stats):
     json.encoder.FLOAT_REPR = lambda o: format(o, '.2f')
@@ -93,39 +127,58 @@ def main():
         "unknown": 0
     }
 
+    q = queue.Queue()
+    pool = ThreadPool(processes=THREADS_COUNT)
+    threads = []
+    for i in range(THREADS_COUNT):
+        threads += [pool.apply_async(process_syslog_messages, (q,))]
+
     if args.port:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("127.0.0.1", args.port))
+        sock.bind(("0.0.0.0", args.port)) # TODO
 
     while True:
         try:
             if args.port:
                 data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
-
-                r = re.search(re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<line>.*)$"),
-                              data.decode("utf-8"))
-                if r:
-                    line = r.group("line")
-                else:
-                    raise ValueError("parsing error: {}".format(data))
+                q.put(data)
             else:
-                line = input()
+                line = input() # TODO
         except (KeyboardInterrupt, EOFError):
+            # stop workers
+            for i in range(THREADS_COUNT):
+                q.put(None)
+
             print()
+
+            for i in range(THREADS_COUNT):
+                t_stats = threads[i].get()
+                print(t_stats)
+                for k in ("2XX", "3XX", "4XX", "499", "5XX"):
+                    stats[k] += t_stats[k]
+
+            print(stats)
             sys.exit()
 
-        try:
-            status = parse(line)
-        except ValueError as e:
-            status = 400 # FIXME
-            print(e)
+        # try:
+        #     status = parse(line)
+        # except ValueError as e:
+        #     status = 400 # FIXME
+        #     print(e)
 
-        stats[get_key(status)] += 1 # TODO: multiple keys
+        # stats[get_key(status)] += 1 # TODO: multiple keys
 
-        if args.output:
-            write_stats(stats, args.output)
-        else:
-            print_stats(stats)
+        #if args.output:
+        #    write_stats(stats, args.output)
+        #else:
+        #    print_stats(stats)
+
+    # stop workers
+    for i in range(5):
+        q.put(None)
+
+    for t in threads:
+        t.join()
 
 if __name__ == "__main__":
     main()
