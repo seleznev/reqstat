@@ -15,13 +15,13 @@
 
 import re
 
-LOG_FORMAT = re.compile(
-    "^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) "\
-    "\[(?P<time_local>[^\s]+ [^\s]+)\] "\
-    "\"(?P<request_method>[A-Z_]+) (?P<request_uri>[^\"]+) HTTP/[^\"]+\" "\
-    "(?P<status>[\d]+) (?P<body_bytes_sent>[\d]+) "\
-    "\"(?P<http_referer>[^\"]*)\" \"(?P<http_user_agent>.*)\"$"
-)
+#LOG_FORMAT = re.compile(
+#    "^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) "\
+#    "\[(?P<time_local>[^\s]+ [^\s]+)\] "\
+#    "\"(?P<request_method>[A-Z_]+) (?P<request_uri>[^\"]+) HTTP/[^\"]+\" "\
+#    "(?P<status>[\d]+) (?P<body_bytes_sent>[\d]+) "\
+#    "\"(?P<http_referer>[^\"]*)\" \"(?P<http_user_agent>.*)\"$"
+#)
 
 def get_key(status):
     if status >= 200 and status <= 299:
@@ -37,8 +37,8 @@ def get_key(status):
     else:
         return "unknown"
 
-def parse_log_entry(line):
-    r = re.search(LOG_FORMAT, line)
+def parse_log_entry(line, regex):
+    r = re.search(regex, line)
     if r:
         return {
             "status": int(r.group("status"))
@@ -46,7 +46,7 @@ def parse_log_entry(line):
     else:
         raise ValueError("parsing error: {}".format(line))
 
-def process_queue(queue, messages_type="syslog"):
+def process_queue(queue, regex, syslog=False):
     stats = {
         "2XX": 0,
         "3XX": 0,
@@ -57,6 +57,9 @@ def process_queue(queue, messages_type="syslog"):
         "total": 0
     }
 
+    syslog_regex = re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<line>.*)$")
+    nginx_regex = re.compile(regex)
+
     while True:
         item = queue.get()
 
@@ -64,9 +67,8 @@ def process_queue(queue, messages_type="syslog"):
             break
 
         try:
-            if messages_type == "syslog":
-                r = re.search(re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<line>.*)$"),
-                              item.decode("utf-8"))
+            if syslog:
+                r = re.search(syslog_regex, item.decode("utf-8"))
                 if r:
                     line = r.group("line")
                 else:
@@ -74,7 +76,7 @@ def process_queue(queue, messages_type="syslog"):
             else:
                 line = item
 
-            result = parse_log_entry(line)
+            result = parse_log_entry(line, nginx_regex)
         except ValueError as e:
             #print_error(str(e))
             break
