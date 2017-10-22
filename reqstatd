@@ -26,7 +26,7 @@ import queue
 from multiprocessing.pool import ThreadPool
 
 from reqstat import config as rconf
-from reqstat.logprocessor import LogProcessor
+from reqstat import logprocessor
 
 def print_error(*message):
     print("{}: {}" .format(os.path.basename(__file__),
@@ -79,7 +79,7 @@ def main():
         messages_type = "nginx"
 
     for i in range(config["worker"]["threads"]):
-        threads += [pool.apply_async(LogProcessor.process_queue, (q, messages_type))]
+        threads += [pool.apply_async(logprocessor.process_queue, (q, messages_type))]
 
     if args.port:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
