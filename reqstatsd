@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import os
+import sys
+import re
+import json
+import argparse
+import socket
+import signal
+
+import queue
+from multiprocessing.pool import ThreadPool
+
+from reqstats.logprocessor import LogProcessor
+
+THREADS_COUNT = 2
+
+def print_error(*message):
+    print("{}: {}" .format(os.path.basename(__file__),
+                           ": ".join(list(message))),
+                           file=sys.stderr)
+
+def format_stats(stats):
+    json.encoder.FLOAT_REPR = lambda o: format(o, '.2f')
+
+    return json.dumps(stats, indent=4, sort_keys=False)
+
+def print_stats(stats):
+    print(format_stats(stats))
+
+def write_stats(stats, path="./stats.json"):
+    with open(path, "w") as f:
+        f.write(format_stats(stats))
+        f.write("\n")
+
+def handler(signum, frame):
+    print('Signal handler called with signal', signum)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
+                        help="print program version")
+    parser.add_argument("--port", metavar="PORT", type=int,
+                        help="port for listening syslog messages")
+    parser.add_argument("-o", "--output", metavar="STATS",
+                        help="path to stats file")
+    args = parser.parse_args()
+
+    # Receive signals
+    signal.signal(signal.SIGUSR1, handler)
+
+    q = queue.Queue()
+    pool = ThreadPool(processes=THREADS_COUNT)
+    threads = []
+    if args.port:
+        messages_type = "syslog"
+    else:
+        messages_type = "nginx"
+
+    for i in range(THREADS_COUNT):
+        threads += [pool.apply_async(LogProcessor.process_queue, (q, messages_type))]
+
+    if args.port:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 100*1024)
+        sock.bind(("0.0.0.0", args.port)) # TODO
+
+    while True:
+        try:
+            if args.port:
+                data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+            else:
+                data = input() # from stdin
+            q.put(data)
+
+        except (KeyboardInterrupt, EOFError):
+            print()
+
+            # Stop workers
+            for i in range(THREADS_COUNT):
+                q.put(None)
+
+            # Receive stats from workers
+            stats = {}
+            for i in range(THREADS_COUNT):
+                t_stats = threads[i].get()
+                print(t_stats)
+
+                for k in t_stats.keys():
+                    if not k in stats:
+                        stats[k] = 0
+                    stats[k] += t_stats[k]
+
+            # Print total results
+            print(stats)
+            sys.exit()
+
+#    for t in threads:
+#        t.join()
+
+if __name__ == "__main__":
+    main()
