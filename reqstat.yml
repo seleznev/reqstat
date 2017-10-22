@@ -1,0 +1,3 @@
+---
+  worker:
+    threads: 2

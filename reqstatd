@@ -25,9 +25,8 @@ import signal
 import queue
 from multiprocessing.pool import ThreadPool
 
+from reqstat import config as rconf
 from reqstat.logprocessor import LogProcessor
-
-THREADS_COUNT = 2
 
 def print_error(*message):
     print("{}: {}" .format(os.path.basename(__file__),
@@ -54,24 +53,32 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
                         help="print program version")
+    parser.add_argument("--config", metavar="CONFIG", type=str, default="reqstat.yml",
+                        help="path to config file")
     parser.add_argument("--ip", metavar="IP", type=str, default="127.0.0.1",
                         help="IP address for listening syslog messages")
     parser.add_argument("--port", metavar="PORT", type=int,
                         help="port for listening syslog messages")
     args = parser.parse_args()
 
+    try:
+        config = rconf.load(args.config)
+    except rconf.ConfigError as e:
+        print_error(str(e))
+        sys.exit(1)
+
     # Receive signals
     signal.signal(signal.SIGUSR1, handler)
 
     q = queue.Queue()
-    pool = ThreadPool(processes=THREADS_COUNT)
+    pool = ThreadPool(processes=config["worker"]["threads"])
     threads = []
     if args.port:
         messages_type = "syslog"
     else:
         messages_type = "nginx"
 
-    for i in range(THREADS_COUNT):
+    for i in range(config["worker"]["threads"]):
         threads += [pool.apply_async(LogProcessor.process_queue, (q, messages_type))]
 
     if args.port:
@@ -90,12 +97,12 @@ def main():
         pass
 
     # Stop workers
-    for i in range(THREADS_COUNT):
+    for i in range(config["worker"]["threads"]):
         q.put(None)
 
     # Receive stats from workers
     stats = {}
-    for i in range(THREADS_COUNT):
+    for i in range(config["worker"]["threads"]):
         t_stats = threads[i].get()
         #print(t_stats)
 
