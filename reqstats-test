@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import os
+import sys
+import socket
+import argparse
+import timeit
+import random
+import time
+
+# 5.128.37.112 - - [13/Oct/2017:16:13:09 +0300] "GET / HTTP/1.1" 304 0 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:58.0) Gecko/20100101 Firefox/58.0"
+
+# log_format combined '$remote_addr - $remote_user [$time_local] '
+#                     '"$request" $status $body_bytes_sent '
+#                     '"$http_referer" "$http_user_agent"';
+
+def print_error(*message):
+    print("{}: {}" .format(os.path.basename(__file__),
+                           ": ".join(list(message))),
+                           file=sys.stderr)
+
+def get_log_entry():
+    status = random.choices([200, 301, 302, 499, 500, 502, 504], [10, 2, 2, 1, 1, 1, 1], k=1)[0]
+
+    return '<190>Oct 22 06:37:12 8ee5523c4a18 nginx: '\
+           '172.20.3.1 - - [22/Oct/2017:06:37:12 +0000] '\
+           '"GET / HTTP/1.0" {} 612 "-" "ApacheBench/2.3"'.format(status)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ip", metavar="IP", type=str, default="127.0.0.1",
+                        help="IP address to sending syslog messages")
+    parser.add_argument("--port", metavar="PORT", type=int, default=3000,
+                        help="port to sending syslog messages")
+    parser.add_argument("-c", "--count", metavar="COUNT", type=int,
+                        help="how many messages to send")
+    args = parser.parse_args()
+
+    udp_ip = '127.0.0.1'
+    udp_port = args.port
+    count = args.count
+
+    start_time = timeit.default_timer()
+
+    try:
+        for i in range(0, count):
+            message = get_log_entry()
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+            sock.sendto(bytes(message, "utf-8"), (udp_ip, udp_port))
+
+            #time.sleep(0.001)
+    except (KeyboardInterrupt, EOFError):
+        print()
+
+    elapsed = timeit.default_timer() - start_time
+
+    print("Total requests: {}".format(count))
+    print("Total time: {:.2f} sec".format(elapsed))
+    print("Requests per second: {:.2f}".format(count / elapsed))
+
+if __name__ == "__main__":
+    main()
