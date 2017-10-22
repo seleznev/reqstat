@@ -1,0 +1,14 @@
+Source: reqstat
+Section: net
+Priority: optional
+Maintainer: Aleksandr Seleznev <alex@slznv.net>
+Build-Depends: debhelper (>= 9), python3, python3-setuptools, dh-systemd
+Vcs-Git: git://github.com/seleznev/reqstat.git
+Vcs-Browser: http://github.com/seleznev/reqstat
+Standards-Version: 3.9.7
+
+
+Package: reqstat
+Architecture: all
+Depends: ${python3:Depends}, ${misc:Depends}
+Description: request statistics

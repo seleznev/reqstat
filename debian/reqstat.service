@@ -1,0 +1,11 @@
+[Unit]
+Description=Reqstat Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/reqstatd --config=/etc/reqstat/reqstat.yml --port=3100
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
