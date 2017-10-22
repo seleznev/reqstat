@@ -18,6 +18,7 @@ import os
 import sys
 import re
 import json
+import time
 import argparse
 import socket
 import signal
@@ -49,6 +50,30 @@ def write_stats(stats, path="./stats.json"):
 def handler(signum, frame):
     print('Signal handler called with signal', signum)
 
+def start_workers(workers_pool, threads, q, regex, syslog):
+    workers = []
+
+    for i in range(threads):
+        workers += [workers_pool.apply_async(logprocessor.process_queue, (q, regex, syslog))]
+
+    return workers
+
+def stop_workers(workers, q, stats):
+    # Stop workers
+    for w in workers:
+        q.put(None)
+
+    # Receive stats from workers
+    for w in workers:
+        t_stats = w.get()
+
+        for k in t_stats.keys():
+            if not k in stats:
+                stats[k] = 0
+            stats[k] += t_stats[k]
+
+    return stats
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
@@ -70,51 +95,54 @@ def main():
     # Receive signals
     signal.signal(signal.SIGUSR1, handler)
 
-    q = queue.Queue()
-    pool = ThreadPool(processes=config["worker"]["threads"])
-    threads = []
+    stats = {}
 
     syslog = False
     if args.port:
         syslog = True
 
-    for i in range(config["worker"]["threads"]):
-        threads += [pool.apply_async(logprocessor.process_queue, (q, config["regex"], syslog))]
+    q = queue.Queue()
+    workers_pool = ThreadPool(processes=config["worker"]["threads"])
+    workers = start_workers(workers_pool, config["worker"]["threads"], q, config["regex"], syslog)
 
-    if args.port:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        #sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 100*1024)
-        sock.bind((args.ip, args.port))
+    reader_pool = ThreadPool(processes=1)
+    reader = reader_pool.apply_async(logprocessor.receive_messages, (q, args.ip, args.port))
+
+    if os.path.exists(config["socket"]):
+        os.remove(config["socket"])
+
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.bind(config["socket"])
+    sock.listen(1)
 
     try:
         while True:
-            if args.port:
-                data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
-            else:
-                data = input() # from stdin
-            q.put(data)
+            connection, client_address = sock.accept()
+
+            data = connection.recv(1024)
+            if not data:
+                break
+            command = data.decode("utf-8").strip()
+
+            if command == "stats":
+                stats = stop_workers(workers, q, stats)
+                workers = start_workers(workers_pool, config["worker"]["threads"], q, config["regex"], syslog)
+                connection.sendall(format_stats(stats).encode("utf-8"))
+
+            elif command == "shutdown":
+                raise KeyboardInterrupt
+
+            connection.close()
+
     except (EOFError, KeyboardInterrupt):
         pass
 
-    # Stop workers
-    for i in range(config["worker"]["threads"]):
-        q.put(None)
+    sock.close()
+    os.remove(config["socket"])
 
-    # Receive stats from workers
-    stats = {}
-    for i in range(config["worker"]["threads"]):
-        t_stats = threads[i].get()
-        #print(t_stats)
+    stats = stop_workers(workers, q, stats)
 
-        for k in t_stats.keys():
-            if not k in stats:
-                stats[k] = 0
-            stats[k] += t_stats[k]
-
-    # Print total results
-    print(format_stats(stats))
-
-    # for t in threads:
+    # for t in workers:
     #     t.join()
 
 if __name__ == "__main__":

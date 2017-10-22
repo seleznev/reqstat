@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import os
+import sys
+import json
+import time
+import socket
+import argparse
+import shutil
+import datetime
+
+from reqstat import config as rconf
+
+def print_error(*message):
+    print("{}: {}" .format(os.path.basename(__file__),
+                           ": ".join(list(message))),
+                           file=sys.stderr)
+
+def get_stats(socket_path):
+    if not os.path.exists(socket_path):
+        raise Exception("socket {} is not exists".format(socket_path))
+
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect(socket_path)
+    sock.send("stats".encode("utf-8"))
+    stats = sock.recv(1024).decode("utf-8")
+    sock.close()
+
+    stats = json.loads(stats)
+
+    return stats
+
+def print_caption(timestamp=False):
+    print("-------------status------------ --err-- -------", end='')
+    if timestamp:
+        print(" -----timestamp-----")
+    else:
+        print()
+
+    print("{:>7} {:>5} {:>5} {:>5} {:>5} {:>7} {:>7}".format("2XX", "3XX", "4XX", "499",
+                                                             "5XX", "unkw", "total"), end='')
+
+    if timestamp:
+        timezone = str(datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo)
+        print(" {:>19}".format(timezone))
+    else:
+        print()
+
+def print_stats(stats, timestamp=False):
+    print("{:>7} {:>5} {:>5} {:>5} {:>5} {:>7} {:>7}".format(stats["2XX"], stats["3XX"],
+                                                             stats["4XX"], stats["499"],
+                                                             stats["5XX"], stats["unknown"],
+                                                             stats["total"]), end='')
+    if timestamp:
+        print(" {:>19}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    else:
+        print()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
+                        help="print program version")
+    parser.add_argument("--config", metavar="CONFIG", type=str, default="reqstat.yml",
+                        help="path to config file")
+    parser.add_argument("-t", "--timestamp", action="store_true",
+                        help="append timestamp to each line")
+    parser.add_argument("interval", metavar="INTERVAL", type=float, nargs="?", default=1)
+    parser.add_argument("count", metavar="COUNT", type=int, nargs="?", default=0)
+    args = parser.parse_args()
+
+    try:
+        config = rconf.load(args.config)
+    except rconf.ConfigError as e:
+        print_error(str(e))
+        sys.exit(1)
+
+    t_width, t_height = shutil.get_terminal_size((80, 20))
+
+    try:
+        stats1 = get_stats(config["socket"])
+
+        print_lines = 0
+        while True:
+            if print_lines % t_height == 0:
+                print_caption(args.timestamp)
+
+            time.sleep(args.interval)
+            stats2 = get_stats(config["socket"])
+
+            for k in stats2.keys():
+                stats1[k] = stats2[k] - stats1[k]
+
+            print_stats(stats1, args.timestamp)
+            print_lines += 1
+
+            if print_lines == args.count:
+                break
+
+            stats1 = stats2
+
+    except Exception as e:
+        print_error(str(e))
+    except KeyboardInterrupt:
+        pass
+
+if __name__ == "__main__":
+    main()

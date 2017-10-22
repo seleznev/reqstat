@@ -1,4 +1,5 @@
 ---
+  socket: /tmp/reqstat.sock
   regex: '^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) \[(?P<time_local>[^\s]+ [^\s]+)\] "(?P<request_method>[A-Z_]+) (?P<request_uri>[^"]+) HTTP/[^"]+" (?P<status>[\d]+) (?P<body_bytes_sent>[\d]+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>.*)"$'
   worker:
     threads: 2

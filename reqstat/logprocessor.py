@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
+import socket
 
 #LOG_FORMAT = re.compile(
 #    "^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) "\
@@ -87,4 +88,20 @@ def process_queue(queue, regex, syslog=False):
         queue.task_done()
 
     return stats;
+
+def receive_messages(queue, ip, port):
+    if port:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 100*1024)
+        sock.bind((ip, port))
+
+    try:
+        while True:
+            if port:
+                data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+            else:
+                data = input() # from stdin
+            queue.put(data)
+    except (EOFError, KeyboardInterrupt):
+        pass
 
