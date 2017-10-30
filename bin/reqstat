@@ -74,7 +74,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
                         help="print program version")
-    parser.add_argument("--config", metavar="CONFIG", type=str, default="reqstat.yml",
+    parser.add_argument("--config", metavar="CONFIG", type=str, default="/etc/reqstat/reqstat.yml",
                         help="path to config file")
     parser.add_argument("-t", "--timestamp", action="store_true",
                         help="append timestamp to each line")
