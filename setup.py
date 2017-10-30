@@ -21,7 +21,7 @@ setup(
     version="0.0.1",
     packages=find_packages(),
 
-    scripts=["reqstatd", "reqstatctl"],
+    scripts=["bin/reqstatd", "bin/reqstat"],
 
     package_data={
         "reqstat": ["reqstat/*.py"],

@@ -7,7 +7,6 @@ Vcs-Git: git://github.com/seleznev/reqstat.git
 Vcs-Browser: http://github.com/seleznev/reqstat
 Standards-Version: 3.9.7
 
-
 Package: reqstat
 Architecture: all
 Depends: ${python3:Depends}, ${misc:Depends}
