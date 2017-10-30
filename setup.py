@@ -27,8 +27,9 @@ setup(
         "reqstat": ["reqstat/*.py"],
     },
 
+    python_requires=">=3",
     install_requires=[
-        "yaml",
+        "PyYAML",
     ],
 
     author="Aleksandr Seleznev",
