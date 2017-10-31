@@ -78,6 +78,8 @@ def main():
                         help="path to config file")
     parser.add_argument("-t", "--timestamp", action="store_true",
                         help="append timestamp to each line")
+    parser.add_argument("-o", "--output", choices=["default", "json"], default="default",
+                        help="output format")
     parser.add_argument("interval", metavar="INTERVAL", type=float, nargs="?", default=1)
     parser.add_argument("count", metavar="COUNT", type=int, nargs="?", default=0)
     args = parser.parse_args()
@@ -95,8 +97,9 @@ def main():
 
         print_lines = 0
         while True:
-            if print_lines % t_height == 0:
-                print_caption(args.timestamp)
+            if args.output == "default":
+                if print_lines % t_height == 0:
+                    print_caption(args.timestamp)
 
             time.sleep(args.interval)
             stats2 = get_stats(config["socket"])
@@ -104,9 +107,12 @@ def main():
             for k in stats2.keys():
                 stats1[k] = stats2[k] - stats1[k]
 
-            print_stats(stats1, args.timestamp)
-            print_lines += 1
+            if args.output == "default":
+                print_stats(stats1, args.timestamp)
+            elif args.output == "json":
+                print(json.dumps(stats1, indent=4, sort_keys=True))
 
+            print_lines += 1
             if print_lines == args.count:
                 break
 
