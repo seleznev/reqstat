@@ -103,7 +103,7 @@ def main():
 
     q = queue.Queue()
     workers_pool = ThreadPool(processes=config["worker"]["threads"])
-    workers = start_workers(workers_pool, config["worker"]["threads"], q, config["regex"], syslog)
+    workers = start_workers(workers_pool, config["worker"]["threads"], q, config["log"]["regex"], syslog)
 
     reader_pool = ThreadPool(processes=1)
     reader = reader_pool.apply_async(logprocessor.receive_messages, (q, args.ip, args.port))
@@ -126,7 +126,7 @@ def main():
 
             if command == "stats":
                 stats = stop_workers(workers, q, stats)
-                workers = start_workers(workers_pool, config["worker"]["threads"], q, config["regex"], syslog)
+                workers = start_workers(workers_pool, config["worker"]["threads"], q, config["log"]["regex"], syslog)
                 connection.sendall(format_stats(stats).encode("utf-8"))
 
             elif command == "shutdown":

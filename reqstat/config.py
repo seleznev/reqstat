@@ -33,16 +33,39 @@ def load(path="reqstat.yml"):
         raise ConfigError("config not found: {}".format(path))
     except ValueError as e:
         raise ConfigError("parse config error: {}".format(str(e)))
+
+    config = validate(config)
+
     return config
 
 def validate(config):
-    try:
-        main_validate(config)
-        return config
-    except ConfigError as e:
-        raise ConfigError(e.message)
-        return None
+    # Socket
+    if not "socket" in config:
+        raise ConfigError("socket is not specified")
 
-def main_validate(config):
-    pass # TODO
+    # Worker
+    if not "worker" in config or config["worker"] == None:
+        raise ConfigError("worker section is not specified or empty")
 
+    if not "threads" in config["worker"]:
+        raise ConfigError("worker.threads is not specified")
+
+    # Log
+    if not "log" in config or config["log"] == None:
+        raise ConfigError("log section is not specified or empty")
+
+    if not "format" in config["log"]:
+        raise ConfigError("log.format is not specified")
+
+    if config["log"]["format"] == "combined":
+        config["log"]["regex"] = '^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) \[(?P<time_local>[^\s]+ [^\s]+)\] "(?P<request_method>[A-Z_]+) (?P<request_uri>[^"]+) HTTP/[^"]+" (?P<status>[\d]+) (?P<body_bytes_sent>[\d]+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>.*)"$'
+    elif config["log"]["format"] == "json":
+        config["log"]["regex"] = None
+    elif config["log"]["format"] == "regex":
+        if not "regex" in config["log"]:
+            raise ConfigError("log.regex is not specified")
+    else:
+        raise ConfigError("log.format has unsupported value")
+
+    #
+    return config
