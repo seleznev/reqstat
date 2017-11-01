@@ -44,7 +44,7 @@ def get_stats(socket_path):
 
     return stats
 
-def print_caption(timestamp=False):
+def print_lines_caption(timestamp=False):
     print("-------------status------------ --err-- -------", end='')
     if timestamp:
         print(" -----timestamp-----")
@@ -60,7 +60,7 @@ def print_caption(timestamp=False):
     else:
         print()
 
-def print_stats(stats, timestamp=False):
+def print_lines_stats(stats, timestamp=False):
     print("{:>7} {:>5} {:>5} {:>5} {:>5} {:>7} {:>7}".format(stats["2XX"], stats["3XX"],
                                                              stats["4XX"], stats["499"],
                                                              stats["5XX"], stats["unknown"],
@@ -70,17 +70,37 @@ def print_stats(stats, timestamp=False):
     else:
         print()
 
+def print_json_stats(stats):
+    print(json.dumps(stats, indent=4, sort_keys=True))
+
+def print_stats(stats, format, options={}):
+    if format == "json":
+        print_json_stats(stats)
+    else:
+        timestamp = False
+        if "timestamp" in options:
+            timestamp = bool(options["timestamp"])
+
+        caption = False
+        if "caption" in options:
+            caption = options["caption"]
+
+        if caption:
+            print_lines_caption(timestamp)
+
+        print_lines_stats(stats, timestamp)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
                         help="print program version")
     parser.add_argument("--config", metavar="CONFIG", type=str, default="/etc/reqstat/reqstat.yml",
                         help="path to config file")
+    parser.add_argument("-o", "--output", choices=["lines", "json"], default="lines",
+                        help="output format: json or lines (vmstat like format)")
     parser.add_argument("-t", "--timestamp", action="store_true",
                         help="append timestamp to each line")
-    parser.add_argument("-o", "--output", choices=["default", "json"], default="default",
-                        help="output format")
-    parser.add_argument("interval", metavar="INTERVAL", type=float, nargs="?", default=1)
+    parser.add_argument("interval", metavar="INTERVAL", type=float, nargs="?", default=0)
     parser.add_argument("count", metavar="COUNT", type=int, nargs="?", default=0)
     args = parser.parse_args()
 
@@ -95,26 +115,25 @@ def main():
     try:
         stats1 = get_stats(config["socket"])
 
-        print_lines = 0
-        while True:
-            if args.output == "default":
-                if print_lines % t_height == 0:
-                    print_caption(args.timestamp)
+        if args.interval == 0:
+            # Print current raw mertics
+            print_stats(stats1, args.output, {"caption": True, "timestamp": args.timestamp})
+            sys.exit(0)
 
+        line_number = 0
+        while True:
             time.sleep(args.interval)
             stats2 = get_stats(config["socket"])
 
             for k in stats2.keys():
                 stats1[k] = stats2[k] - stats1[k]
 
-            if args.output == "default":
-                print_stats(stats1, args.timestamp)
-            elif args.output == "json":
-                print(json.dumps(stats1, indent=4, sort_keys=True))
+            caption = line_number % t_height == 0
+            print_stats(stats1, args.output, {"caption": caption, "timestamp": args.timestamp})
 
-            print_lines += 1
-            if print_lines == args.count:
-                break
+            line_number += 1
+            if line_number == args.count:
+                break # all requsted lines printed already
 
             stats1 = stats2
 
