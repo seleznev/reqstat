@@ -46,7 +46,7 @@ def parse_log_entry(line, regex):
             "status": int(r.group("status"))
         }
     else:
-        raise ValueError("parsing error: {}".format(line))
+        raise ValueError("can't parse log entry: {}".format(line))
 
 def process_queue(queue, regex, syslog=False):
     stats = {
@@ -74,7 +74,7 @@ def process_queue(queue, regex, syslog=False):
                 if r:
                     line = r.group("line")
                 else:
-                    raise ValueError("parsing error: {}".format(item))
+                    raise ValueError("can't parse syslog message: {}".format(item))
             else:
                 line = item
 
