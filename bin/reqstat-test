@@ -50,7 +50,7 @@ def main():
                         help="how many messages to send")
     args = parser.parse_args()
 
-    udp_ip = '127.0.0.1'
+    udp_ip = args.ip
     udp_port = args.port
     count = args.count
 
