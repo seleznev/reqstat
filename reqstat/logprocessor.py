@@ -81,7 +81,7 @@ def process_queue(queue, regex, syslog=False):
             result = parse_log_entry(line, nginx_regex)
         except ValueError as e:
             log.error(str(e))
-            break
+            continue # skip this iteration
 
         stats[get_key(result["status"])] += 1
         stats["total"] += 1
