@@ -28,11 +28,6 @@ import time
 #                     '"$request" $status $body_bytes_sent '
 #                     '"$http_referer" "$http_user_agent"';
 
-def print_error(*message):
-    print("{}: {}" .format(os.path.basename(__file__),
-                           ": ".join(list(message))),
-                           file=sys.stderr)
-
 def get_log_entry():
     status = random.choices([200, 301, 302, 499, 500, 502, 504], [10, 2, 2, 1, 1, 1, 1], k=1)[0]
 

@@ -22,17 +22,13 @@ import time
 import argparse
 import socket
 import signal
+import logging as log
 
 import queue
 from multiprocessing.pool import ThreadPool
 
 from reqstat import config as rconf
 from reqstat import logprocessor
-
-def print_error(*message):
-    print("{}: {}" .format(os.path.basename(__file__),
-                           ": ".join(list(message))),
-                           file=sys.stderr)
 
 def format_stats(stats):
     json.encoder.FLOAT_REPR = lambda o: format(o, '.2f')
@@ -75,6 +71,8 @@ def stop_workers(workers, q, stats):
     return stats
 
 def main():
+    log.basicConfig(format="%(levelname)s: %(message)s")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
                         help="print program version")
@@ -89,7 +87,7 @@ def main():
     try:
         config = rconf.load(args.config)
     except rconf.ConfigError as e:
-        print_error(str(e))
+        log.error(str(e))
         sys.exit(1)
 
     # Receive signals

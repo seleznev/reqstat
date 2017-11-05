@@ -22,13 +22,9 @@ import socket
 import argparse
 import shutil
 import datetime
+import logging as log
 
 from reqstat import config as rconf
-
-def print_error(*message):
-    print("{}: {}" .format(os.path.basename(__file__),
-                           ": ".join(list(message))),
-                           file=sys.stderr)
 
 def get_stats(socket_path):
     if not os.path.exists(socket_path):
@@ -91,6 +87,10 @@ def print_stats(stats, format, options={}):
         print_lines_stats(stats, timestamp)
 
 def main():
+    log.basicConfig(
+        format="{}: %(levelname)s: %(message)s".format(os.path.basename(__file__))
+    )
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s 0.0.1",
                         help="print program version")
@@ -107,7 +107,7 @@ def main():
     try:
         config = rconf.load(args.config)
     except rconf.ConfigError as e:
-        print_error(str(e))
+        log.error(str(e))
         sys.exit(1)
 
     t_width, t_height = shutil.get_terminal_size((80, 20))
@@ -138,7 +138,7 @@ def main():
             stats1 = stats2
 
     except Exception as e:
-        print_error(str(e))
+        log.error(str(e))
     except KeyboardInterrupt:
         pass
 

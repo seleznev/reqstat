@@ -15,6 +15,7 @@
 
 import re
 import socket
+import logging as log
 
 #LOG_FORMAT = re.compile(
 #    "^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) "\
@@ -79,7 +80,7 @@ def process_queue(queue, regex, syslog=False):
 
             result = parse_log_entry(line, nginx_regex)
         except ValueError as e:
-            #print_error(str(e))
+            log.error(str(e))
             break
 
         stats[get_key(result["status"])] += 1
