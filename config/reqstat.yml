@@ -9,3 +9,7 @@
       ip: 127.0.0.1
       port: 2671
     format: combined # or regex, json
+  metrics:
+    - type: counter
+      field: status
+      transform: http-code

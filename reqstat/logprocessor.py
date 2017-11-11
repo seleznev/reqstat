@@ -26,41 +26,40 @@ import logging as log
 #)
 
 def get_key(status):
+    status = int(status)
+
     if status >= 200 and status <= 299:
         return "2XX"
     elif status >= 300 and status <= 399:
         return "3XX"
-    elif status >= 400 and status < 499:
+    elif status >= 400 and status <= 499:
         return "4XX"
-    elif status == 499:
-        return "499"
     elif status >= 500 and status <= 599:
         return "5XX"
     else:
         return "unknown"
 
+def parse_syslog_message(message, regex):
+    r = re.search(regex, message.decode("utf-8"))
+    if r:
+        return r.group("data")
+    else:
+        raise ValueError("can't parse syslog message: {}".format(data))
+
 def parse_log_entry(line, regex):
     r = re.search(regex, line)
     if r:
-        return {
-            "status": int(r.group("status"))
-        }
+        return r.groupdict()
     else:
         raise ValueError("can't parse log entry: {}".format(line))
 
-def process_queue(queue, regex, syslog=False):
-    stats = {
-        "2XX": 0,
-        "3XX": 0,
-        "4XX": 0,
-        "499": 0,
-        "5XX": 0,
-        "unknown": 0,
-        "total": 0
-    }
+def process_queue(queue, regex, syslog=False, metrics=[]):
+    stats = {}
 
-    syslog_regex = re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<line>.*)$")
-    nginx_regex = re.compile(regex)
+    metrics = list(map(lambda m: m["field"], metrics))
+
+    syslog_regex = re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<data>.*)$")
+    log_regex = re.compile(regex)
 
     while True:
         item = queue.get()
@@ -70,21 +69,26 @@ def process_queue(queue, regex, syslog=False):
 
         try:
             if syslog:
-                r = re.search(syslog_regex, item.decode("utf-8"))
-                if r:
-                    line = r.group("line")
-                else:
-                    raise ValueError("can't parse syslog message: {}".format(item))
+                line = parse_syslog_message(item, syslog_regex)
             else:
                 line = item
 
-            result = parse_log_entry(line, nginx_regex)
+            entry = parse_log_entry(line, log_regex)
         except ValueError as e:
             log.error(str(e))
             continue # skip this iteration
 
-        stats[get_key(result["status"])] += 1
-        stats["total"] += 1
+        for k,v in entry.items():
+            if not k in metrics:
+                continue
+
+            if not k in stats:
+                stats[k] = {}
+
+            if not str(entry[k]) in stats[k]:
+                stats[k][str(entry[k])] = 0
+
+            stats[k][str(entry[k])] += 1
 
         queue.task_done()
 

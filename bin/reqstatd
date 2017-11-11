@@ -46,11 +46,11 @@ def write_stats(stats, path="./stats.json"):
 def handler(signum, frame):
     print('Signal handler called with signal', signum)
 
-def start_workers(workers_pool, threads, q, regex, syslog):
+def start_workers(workers_pool, threads, q, regex, syslog, metrics):
     workers = []
 
     for i in range(threads):
-        workers += [workers_pool.apply_async(logprocessor.process_queue, (q, regex, syslog))]
+        workers += [workers_pool.apply_async(logprocessor.process_queue, (q, regex, syslog, metrics))]
 
     return workers
 
@@ -63,10 +63,15 @@ def stop_workers(workers, q, stats):
     for w in workers:
         t_stats = w.get()
 
-        for k in t_stats.keys():
+        for k,v in t_stats.items():
             if not k in stats:
-                stats[k] = 0
-            stats[k] += t_stats[k]
+                stats[k] = {}
+
+            for kk,vv in v.items():
+                if not kk in stats[k]:
+                    stats[k][kk] = 0
+
+                stats[k][kk] += t_stats[k][kk]
 
     return stats
 
@@ -97,7 +102,8 @@ def main():
                             config["global"]["worker"]["threads"],
                             q,
                             config["input"]["regex"],
-                            config["input"]["type"] == "syslog")
+                            config["input"]["type"] == "syslog",
+                            config["metrics"])
 
     reader_pool = ThreadPool(processes=1)
     reader = reader_pool.apply_async(logprocessor.receive_messages,
@@ -125,7 +131,8 @@ def main():
                                         config["global"]["worker"]["threads"],
                                         q,
                                         config["input"]["regex"],
-                                        config["input"]["type"] == "syslog")
+                                        config["input"]["type"] == "syslog",
+                                        config["metrics"])
                 connection.sendall(format_stats(stats).encode("utf-8"))
 
             elif command == "shutdown":

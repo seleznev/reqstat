@@ -46,6 +46,7 @@ def validate(config):
         "input.listen.ip": str,
         "input.listen.port": int,
         "input.format": str,
+        "metrics": None, # do not basic check for array
     }
 
     # Basic validation
