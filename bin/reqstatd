@@ -78,10 +78,6 @@ def main():
                         help="print program version")
     parser.add_argument("--config", metavar="CONFIG", type=str, default="/etc/reqstat/reqstat.yml",
                         help="path to config file")
-    parser.add_argument("--ip", metavar="IP", type=str, default="127.0.0.1",
-                        help="IP address for listening syslog messages")
-    parser.add_argument("--port", metavar="PORT", type=int,
-                        help="port for listening syslog messages")
     args = parser.parse_args()
 
     try:
@@ -95,22 +91,23 @@ def main():
 
     stats = {}
 
-    syslog = False
-    if args.port:
-        syslog = True
-
     q = queue.Queue()
-    workers_pool = ThreadPool(processes=config["worker"]["threads"])
-    workers = start_workers(workers_pool, config["worker"]["threads"], q, config["log"]["regex"], syslog)
+    workers_pool = ThreadPool(processes=config["global"]["worker"]["threads"])
+    workers = start_workers(workers_pool,
+                            config["global"]["worker"]["threads"],
+                            q,
+                            config["input"]["regex"],
+                            config["input"]["type"] == "syslog")
 
     reader_pool = ThreadPool(processes=1)
-    reader = reader_pool.apply_async(logprocessor.receive_messages, (q, args.ip, args.port))
+    reader = reader_pool.apply_async(logprocessor.receive_messages,
+                                     (q, config["input"]["listen"]["ip"], config["input"]["listen"]["port"]))
 
-    if os.path.exists(config["socket"]):
-        os.remove(config["socket"])
+    if os.path.exists(config["global"]["socket"]):
+        os.remove(config["global"]["socket"])
 
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.bind(config["socket"])
+    sock.bind(config["global"]["socket"])
     sock.listen(1)
 
     try:
@@ -124,7 +121,11 @@ def main():
 
             if command == "stats":
                 stats = stop_workers(workers, q, stats)
-                workers = start_workers(workers_pool, config["worker"]["threads"], q, config["log"]["regex"], syslog)
+                workers = start_workers(workers_pool,
+                                        config["global"]["worker"]["threads"],
+                                        q,
+                                        config["input"]["regex"],
+                                        config["input"]["type"] == "syslog")
                 connection.sendall(format_stats(stats).encode("utf-8"))
 
             elif command == "shutdown":
@@ -136,7 +137,7 @@ def main():
         pass
 
     sock.close()
-    os.remove(config["socket"])
+    os.remove(config["global"]["socket"])
 
     stats = stop_workers(workers, q, stats)
 

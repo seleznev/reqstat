@@ -113,7 +113,7 @@ def main():
     t_width, t_height = shutil.get_terminal_size((80, 20))
 
     try:
-        stats1 = get_stats(config["socket"])
+        stats1 = get_stats(config["global"]["socket"])
 
         if args.interval == 0:
             # Print current raw mertics
@@ -123,7 +123,7 @@ def main():
         line_number = 0
         while True:
             time.sleep(args.interval)
-            stats2 = get_stats(config["socket"])
+            stats2 = get_stats(config["global"]["socket"])
 
             for k in stats2.keys():
                 stats1[k] = stats2[k] - stats1[k]

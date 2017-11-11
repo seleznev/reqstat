@@ -1,6 +1,11 @@
 ---
-  socket: /tmp/reqstat.sock
-  worker:
-    threads: 2
-  log:
+  global:
+    socket: /tmp/reqstat.sock
+    worker:
+      threads: 2
+  input:
+    type: syslog
+    listen:
+      ip: 127.0.0.1
+      port: 2671
     format: combined # or regex, json

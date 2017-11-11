@@ -39,33 +39,45 @@ def load(path="reqstat.yml"):
     return config
 
 def validate(config):
-    # Socket
-    if not "socket" in config:
-        raise ConfigError("socket is not specified")
+    settings = {
+        "global.socket": str,
+        "global.worker.threads": int,
+        "input.type": str,
+        "input.listen.ip": str,
+        "input.listen.port": int,
+        "input.format": str,
+    }
 
-    # Worker
-    if not "worker" in config or config["worker"] == None:
-        raise ConfigError("worker section is not specified or empty")
+    # Basic validation
+    for k,v in settings.items():
+        c = config
 
-    if not "threads" in config["worker"]:
-        raise ConfigError("worker.threads is not specified")
+        for p in k.split("."):
+            if not p in c:
+                raise ConfigError("{} is not specified".format(k))
 
-    # Log
-    if not "log" in config or config["log"] == None:
-        raise ConfigError("log section is not specified or empty")
+            if v and type(c[p]) is type(v):
+                raise ConfigError("{} have wrong type".format(k))
 
-    if not "format" in config["log"]:
-        raise ConfigError("log.format is not specified")
+            c = c[p]
 
-    if config["log"]["format"] == "combined":
-        config["log"]["regex"] = '^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) \[(?P<time_local>[^\s]+ [^\s]+)\] "(?P<request_method>[A-Z_]+) (?P<request_uri>[^"]+) HTTP/[^"]+" (?P<status>[\d]+) (?P<body_bytes_sent>[\d]+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>.*)"$'
-    elif config["log"]["format"] == "json":
-        config["log"]["regex"] = None
-    elif config["log"]["format"] == "regex":
-        if not "regex" in config["log"]:
-            raise ConfigError("log.regex is not specified")
-    else:
-        raise ConfigError("log.format has unsupported value")
+    # Predefined formats
+    formats = {
+        "combined": {
+            "format": "regex",
+            "regex": '^(?P<remote_addr>[a-f\d:.]+) - (?P<remote_user>[^\s]+) \[(?P<time_local>[^\s]+ [^\s]+)\] "(?P<request_method>[A-Z_]+) (?P<request_uri>[^"]+) HTTP/[^"]+" (?P<status>[\d]+) (?P<body_bytes_sent>[\d]+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>.*)"$'
+        }
+    }
 
-    #
+    fname = config["input"]["format"]
+    if fname in formats:
+        # Override data in config
+        for k,v in formats[fname].items():
+            config["input"][k] = v
+
+    # Check input format support
+    fname = config["input"]["format"]
+    if not fname in ("regex"):
+        raise ConfigError("\"{}\" for {} is not supported".format(fname, "input.format"))
+
     return config
