@@ -53,13 +53,13 @@ def parse_log_entry(line, regex):
     else:
         raise ValueError("can't parse log entry: {}".format(line))
 
-def process_queue(queue, regex, syslog=False, metrics=[]):
+def process_queue(queue, input={}, metrics=[]):
     stats = {}
 
-    metrics = list(map(lambda m: m["field"], metrics))
+    metrics_fields = list(map(lambda m: m["field"], metrics))
 
     syslog_regex = re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<data>.*)$")
-    log_regex = re.compile(regex)
+    log_regex = re.compile(input["regex"])
 
     while True:
         item = queue.get()
@@ -68,7 +68,7 @@ def process_queue(queue, regex, syslog=False, metrics=[]):
             break
 
         try:
-            if syslog:
+            if input["type"] == "syslog":
                 line = parse_syslog_message(item, syslog_regex)
             else:
                 line = item
@@ -79,7 +79,7 @@ def process_queue(queue, regex, syslog=False, metrics=[]):
             continue # skip this iteration
 
         for k,v in entry.items():
-            if not k in metrics:
+            if not k in metrics_fields:
                 continue
 
             if not k in stats:
@@ -94,19 +94,22 @@ def process_queue(queue, regex, syslog=False, metrics=[]):
 
     return stats;
 
-def receive_messages(queue, ip, port):
-    if port:
+def receive_messages(queue, ip=None, port=None):
+    network = (ip and port)
+
+    if network:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 100*1024)
         sock.bind((ip, port))
 
     try:
         while True:
-            if port:
+            if network:
                 data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
             else:
                 data = input() # from stdin
             queue.put(data)
+
     except (EOFError, KeyboardInterrupt):
         pass
 

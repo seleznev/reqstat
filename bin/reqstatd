@@ -24,56 +24,50 @@ import socket
 import signal
 import logging as log
 
-import queue
+from queue import Queue
 from multiprocessing.pool import ThreadPool
 
 from reqstat import config as rconf
 from reqstat import logprocessor
 
-def format_stats(stats):
-    json.encoder.FLOAT_REPR = lambda o: format(o, '.2f')
-
-    return json.dumps(stats, indent=4, sort_keys=False)
-
-def print_stats(stats):
-    print(format_stats(stats))
-
-def write_stats(stats, path="./stats.json"):
-    with open(path, "w") as f:
-        f.write(format_stats(stats))
-        f.write("\n")
-
-def handler(signum, frame):
-    print('Signal handler called with signal', signum)
-
-def start_workers(workers_pool, threads, q, regex, syslog, metrics):
+def start_workers(pool, threads, queue, config):
     workers = []
 
     for i in range(threads):
-        workers += [workers_pool.apply_async(logprocessor.process_queue, (q, regex, syslog, metrics))]
+        workers += [
+            pool.apply_async(logprocessor.process_queue,
+                             (queue, config["input"], config["metrics"]))
+        ]
 
     return workers
 
-def stop_workers(workers, q, stats):
-    # Stop workers
+def stop_workers(workers, queue):
     for w in workers:
-        q.put(None)
+        queue.put(None) # will be recognized as terminate command
 
-    # Receive stats from workers
+def receive_stats(workers):
+    result = []
+
     for w in workers:
-        t_stats = w.get()
+        result.append(w.get())
 
-        for k,v in t_stats.items():
-            if not k in stats:
-                stats[k] = {}
+    return result
+
+def merge_stats(*stats):
+    result = {}
+
+    for s in list(stats):
+        for k,v in s.items():
+            if not k in result:
+                result[k] = {}
 
             for kk,vv in v.items():
-                if not kk in stats[k]:
-                    stats[k][kk] = 0
+                if not kk in result[k]:
+                    result[k][kk] = 0
 
-                stats[k][kk] += t_stats[k][kk]
+                result[k][kk] += s[k][kk]
 
-    return stats
+    return result
 
 def main():
     log.basicConfig(format="%(levelname)s: %(message)s")
@@ -86,57 +80,60 @@ def main():
     args = parser.parse_args()
 
     try:
-        config = rconf.load(args.config)
+        config = rconf.load(args.config) # parse and validate
     except rconf.ConfigError as e:
-        log.error(str(e))
+        log.error(e)
         sys.exit(1)
 
-    # Receive signals
-    signal.signal(signal.SIGUSR1, handler)
-
+    # Runtume stats received from workers will be stored here
     stats = {}
 
-    q = queue.Queue()
-    workers_pool = ThreadPool(processes=config["global"]["worker"]["threads"])
-    workers = start_workers(workers_pool,
-                            config["global"]["worker"]["threads"],
-                            q,
-                            config["input"]["regex"],
-                            config["input"]["type"] == "syslog",
-                            config["metrics"])
+    # Queue for incoming messages (log entries)
+    queue = Queue()
 
+    # Workers pool
+    workers_count = config["global"]["worker"]["threads"]
+    workers_pool = ThreadPool(processes=workers_count)
+    workers = start_workers(workers_pool, workers_count, queue, config)
+
+    # Input (single) process
     reader_pool = ThreadPool(processes=1)
-    reader = reader_pool.apply_async(logprocessor.receive_messages,
-                                     (q, config["input"]["listen"]["ip"], config["input"]["listen"]["port"]))
+    reader_options = (queue, config["input"]["listen"]["ip"], config["input"]["listen"]["port"])
+    reader = reader_pool.apply_async(logprocessor.receive_messages, reader_options)
 
-    if os.path.exists(config["global"]["socket"]):
-        os.remove(config["global"]["socket"])
+    # Control socket
+    socket_path = config["global"]["socket"]
+
+    if os.path.exists(socket_path):
+        os.remove(socket_path)
 
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.bind(config["global"]["socket"])
+    sock.bind(socket_path)
     sock.listen(1)
 
+    # Main loop for control messages
     try:
         while True:
             connection, client_address = sock.accept()
 
             data = connection.recv(1024)
             if not data:
-                break
+                continue
+
             command = data.decode("utf-8").strip()
 
             if command == "stats":
-                stats = stop_workers(workers, q, stats)
-                workers = start_workers(workers_pool,
-                                        config["global"]["worker"]["threads"],
-                                        q,
-                                        config["input"]["regex"],
-                                        config["input"]["type"] == "syslog",
-                                        config["metrics"])
-                connection.sendall(format_stats(stats).encode("utf-8"))
+                # Restart workers to receive stats
+                stop_workers(workers, queue)
+                stats = merge_stats(stats, *receive_stats(workers))
+                workers = start_workers(workers_pool, workers_count, queue, config)
 
-            elif command == "shutdown":
-                raise KeyboardInterrupt
+                # Return currents stats to client
+                response = json.dumps(stats, indent=4, sort_keys=False)
+                connection.sendall(response.encode("utf-8"))
+
+            else:
+                connection.sendall("Unknown command".encode("utf-8"))
 
             connection.close()
 
@@ -144,12 +141,10 @@ def main():
         pass
 
     sock.close()
-    os.remove(config["global"]["socket"])
+    os.remove(socket_path)
 
-    stats = stop_workers(workers, q, stats)
-
-    # for t in workers:
-    #     t.join()
+    stop_workers(workers, queue)
+    receive_stats(workers) # waiting workers to finish gracefully
 
 if __name__ == "__main__":
     main()
