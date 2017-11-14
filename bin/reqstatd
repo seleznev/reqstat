@@ -28,14 +28,15 @@ from queue import Queue
 from multiprocessing.pool import ThreadPool
 
 from reqstat import config as rconf
-from reqstat import logprocessor
+from reqstat.logprocessor import LogProcessor
+from reqstat.logstat import LogStat
 
 def start_workers(pool, threads, queue, config):
     workers = []
 
     for i in range(threads):
         workers += [
-            pool.apply_async(logprocessor.process_queue,
+            pool.apply_async(LogProcessor.process_queue,
                              (queue, config["input"], config["metrics"]))
         ]
 
@@ -50,22 +51,6 @@ def receive_stats(workers):
 
     for w in workers:
         result.append(w.get())
-
-    return result
-
-def merge_stats(*stats):
-    result = {}
-
-    for s in list(stats):
-        for k,v in s.items():
-            if not k in result:
-                result[k] = {}
-
-            for kk,vv in v.items():
-                if not kk in result[k]:
-                    result[k][kk] = 0
-
-                result[k][kk] += s[k][kk]
 
     return result
 
@@ -86,7 +71,7 @@ def main():
         sys.exit(1)
 
     # Runtume stats received from workers will be stored here
-    stats = {}
+    stats = LogStat(config["metrics"])
 
     # Queue for incoming messages (log entries)
     queue = Queue()
@@ -99,7 +84,7 @@ def main():
     # Input (single) process
     reader_pool = ThreadPool(processes=1)
     reader_options = (queue, config["input"]["listen"]["ip"], config["input"]["listen"]["port"])
-    reader = reader_pool.apply_async(logprocessor.receive_messages, reader_options)
+    reader = reader_pool.apply_async(LogProcessor.receive_messages, reader_options)
 
     # Control socket
     socket_path = config["global"]["socket"]
@@ -125,12 +110,11 @@ def main():
             if command == "stats":
                 # Restart workers to receive stats
                 stop_workers(workers, queue)
-                stats = merge_stats(stats, *receive_stats(workers))
+                stats = LogStat.merge_stats(stats, *receive_stats(workers))
                 workers = start_workers(workers_pool, workers_count, queue, config)
 
                 # Return currents stats to client
-                response = json.dumps(stats, indent=4, sort_keys=False)
-                connection.sendall(response.encode("utf-8"))
+                connection.sendall(str(stats).encode("utf-8"))
 
             else:
                 connection.sendall("Unknown command".encode("utf-8"))
