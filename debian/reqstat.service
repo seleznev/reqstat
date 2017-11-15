@@ -4,6 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=reqstat
+Group=reqstat
 ExecStart=/usr/bin/reqstatd --config=/etc/reqstat/reqstat.yml
 Restart=always
 

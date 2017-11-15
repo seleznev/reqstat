@@ -21,5 +21,7 @@ override_dh_install:
 	: # Install systemd files
 	install -d $(DESTDIR)/lib/systemd/system
 	install -m 644 debian/reqstat.service $(DESTDIR)/lib/systemd/system
+	install -d $(DESTDIR)/usr/lib/tmpfiles.d
+	install -m 644 debian/reqstat.conf $(DESTDIR)/usr/lib/tmpfiles.d
 	dh_install
 

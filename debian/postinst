@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+# creating reqstat group if he isn't already there
+if ! getent group reqstat >/dev/null; then
+        # Adding system group: reqstat.
+        addgroup --system reqstat >/dev/null
+fi
+
+# creating reqstat user if he isn't already there
+if ! getent passwd reqstat >/dev/null; then
+	adduser --quiet --system --ingroup reqstat --no-create-home --home /run/reqstat --shell /usr/sbin/nologin reqstat
+fi
+
+#DEBHELPER#
+
+exit 0
