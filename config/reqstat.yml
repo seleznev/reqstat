@@ -1,6 +1,6 @@
 ---
   global:
-    socket: /tmp/reqstat.sock
+    socket: /var/run/reqstat/reqstat.sock
     worker:
       threads: 2
   input:
