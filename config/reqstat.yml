@@ -8,7 +8,7 @@
     listen:
       ip: 127.0.0.1
       port: 2671
-    format: combined # or regex, json
+    format: combined # or regex
   metrics:
     - type: counter
       field: status
