@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
+import json
 
 class LogEntry():
     def __init__(self, line, regex):
@@ -22,7 +23,13 @@ class LogEntry():
     def items(self):
         return self.fields.items()
 
+    def keys(self):
+        return self.fields.keys()
+
     def __getitem__(self, key):
+        if not key in self.fields:
+            return None
+
         return self.fields[key]
 
     def __setitem__(self, key, item):

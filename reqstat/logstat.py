@@ -14,26 +14,42 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import json
+import logging as log
 
 from collections import OrderedDict
 
 class LogStat():
     def __init__(self, metrics={}):
         self.stats = OrderedDict()
+        self.metrics = metrics
         self.metrics_fields = list(map(lambda m: m["field"], metrics))
 
     def insert(self, entry):
-        for k,v in entry.items():
-            if not k in self.metrics_fields:
+        for metric in self.metrics:
+            m_type = metric["type"]
+            m_field = metric["field"]
+            m_transform = metric["transform"]
+
+            if not m_field in entry.keys():
+                log.warning("can't find \"{}\" field in log entry: {}".format(m_field, entry))
                 continue
 
-            if not k in self.stats:
-                self.stats[k] = {}
+            if not m_field in self.stats:
+                self.stats[m_field] = {}
 
-            if not str(entry[k]) in self.stats[k]:
-                self.stats[k][str(entry[k])] = 0
+            # Transform
+            value = entry[m_field]
+            if m_transform == "http-code":
+                value = LogStat.get_key(value)
 
-            self.stats[k][str(entry[k])] += 1
+            # Add into statistics
+            if m_type == "counter":
+                if not str(value) in self.stats[m_field]:
+                    self.stats[m_field][str(value)] = 0
+
+                self.stats[m_field][str(value)] += 1
+            else:
+                log.warning("metric for field \"{}\" has unsupported type".format(m_field))
 
     @staticmethod
     def merge_stats(*stats):
@@ -55,7 +71,8 @@ class LogStat():
     def __str__(self):
         return json.dumps(self.stats, indent=4, sort_keys=False)
 
-    def get_key(self, status):
+    @staticmethod
+    def get_key(status):
         status = int(status)
 
         if status >= 200 and status <= 299:
