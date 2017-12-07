@@ -64,9 +64,9 @@ def main():
 
     elapsed = timeit.default_timer() - start_time
 
-    print("Total requests: {}".format(count))
+    print("Total requests: {}".format(i))
     print("Total time: {:.2f} sec".format(elapsed))
-    print("Requests per second: {:.2f}".format(count / elapsed))
+    print("Requests per second: {:.2f}".format(i / elapsed))
 
 if __name__ == "__main__":
     main()
