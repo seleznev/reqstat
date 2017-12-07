@@ -29,11 +29,18 @@ import time
 #                     '"$http_referer" "$http_user_agent"';
 
 def get_log_entry():
+    address = "{}.{}.{}.{}".format(
+        random.randrange(1, 254),
+        random.randrange(1, 254),
+        random.randrange(1, 254),
+        random.randrange(1, 254)
+    )
     status = random.choices([200, 301, 302, 499, 500, 502, 504], [10, 2, 2, 1, 1, 1, 1], k=1)[0]
+    length = random.randrange(100, 999999)
 
     return '<190>Oct 22 06:37:12 8ee5523c4a18 nginx: '\
-           '172.20.3.1 - - [22/Oct/2017:06:37:12 +0000] '\
-           '"GET / HTTP/1.0" {} 612 "-" "ApacheBench/2.3"'.format(status)
+           '{} - - [22/Oct/2017:06:37:12 +0000] '\
+           '"GET / HTTP/1.0" {} {} "-" "ApacheBench/2.3"'.format(address, status, length)
 
 def main():
     parser = argparse.ArgumentParser()

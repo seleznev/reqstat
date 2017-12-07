@@ -99,27 +99,30 @@ def main():
     # Main loop for control messages
     try:
         while True:
-            connection, client_address = sock.accept()
+            try:
+                connection, client_address = sock.accept()
 
-            data = connection.recv(1024)
-            if not data:
-                continue
+                data = connection.recv(1024)
+                if not data:
+                    continue
 
-            command = data.decode("utf-8").strip()
+                command = data.decode("utf-8").strip()
 
-            if command == "stats":
-                # Restart workers to receive stats
-                stop_workers(workers, queue)
-                stats = LogStat.merge_stats(stats, *receive_stats(workers))
-                workers = start_workers(workers_pool, workers_count, queue, config)
+                if command == "stats":
+                    # Restart workers to receive stats
+                    stop_workers(workers, queue)
+                    stats = LogStat.merge_stats(stats, *receive_stats(workers))
+                    workers = start_workers(workers_pool, workers_count, queue, config)
 
-                # Return currents stats to client
-                connection.sendall(str(stats).encode("utf-8"))
+                    # Return currents stats to client
+                    connection.sendall(str(stats).encode("utf-8"))
 
-            else:
-                connection.sendall("Unknown command".encode("utf-8"))
+                else:
+                    connection.sendall("Unknown command".encode("utf-8"))
 
-            connection.close()
+                connection.close()
+            except BrokenPipeError:
+                pass # TODO: save error into log
 
     except (EOFError, KeyboardInterrupt):
         pass

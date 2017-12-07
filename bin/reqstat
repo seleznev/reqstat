@@ -33,7 +33,13 @@ def get_stats(socket_path):
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect(socket_path)
     sock.send("stats".encode("utf-8"))
-    stats = sock.recv(1024).decode("utf-8")
+
+    stats = ""
+    data = sock.recv(1024).decode("utf-8")
+    while data != "":
+        stats = stats + data
+        data = sock.recv(1024*1024).decode("utf-8")
+
     sock.close()
 
     stats = json.loads(stats)
