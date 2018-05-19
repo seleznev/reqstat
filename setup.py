@@ -30,6 +30,7 @@ setup(
     python_requires=">=3",
     install_requires=[
         "PyYAML",
+        "prometheus-client",
     ],
 
     author="Aleksandr Seleznev",
