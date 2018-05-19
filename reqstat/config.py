@@ -40,8 +40,7 @@ def load(path="reqstat.yml"):
 
 def validate(config):
     settings = {
-        "global.socket": str,
-        "global.worker.threads": int,
+        "global.metrics.port": int,
         "input.type": str,
         "input.listen.ip": str,
         "input.listen.port": int,
@@ -61,6 +60,11 @@ def validate(config):
                 raise ConfigError("{} have wrong type".format(k))
 
             c = c[p]
+
+    # Input type
+    if config["input"]["type"] != "syslog":
+        raise ConfigError("\"{}\" for {} is not supported".format(config["input"]["type"],
+                                                                  "input.type"))
 
     # Predefined formats
     formats = {

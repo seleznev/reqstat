@@ -16,43 +16,16 @@
 
 import os
 import sys
-import re
-import json
 import time
 import argparse
 import socket
-import signal
 import logging as log
 
-from queue import Queue
-from multiprocessing.pool import ThreadPool
+from prometheus_client import start_http_server
 
+from reqstat import utils
 from reqstat import config as rconf
-from reqstat.logprocessor import LogProcessor
 from reqstat.logstat import LogStat
-
-def start_workers(pool, threads, queue, config):
-    workers = []
-
-    for i in range(threads):
-        workers += [
-            pool.apply_async(LogProcessor.process_queue,
-                             (queue, config["input"], config["metrics"]))
-        ]
-
-    return workers
-
-def stop_workers(workers, queue):
-    for w in workers:
-        queue.put(None) # will be recognized as terminate command
-
-def receive_stats(workers):
-    result = []
-
-    for w in workers:
-        result.append(w.get())
-
-    return result
 
 def main():
     log.basicConfig(format="%(levelname)s: %(message)s")
@@ -73,65 +46,24 @@ def main():
     # Runtume stats received from workers will be stored here
     stats = LogStat(config["metrics"])
 
-    # Queue for incoming messages (log entries)
-    queue = Queue()
+    # Start expose metrics
+    start_http_server(config["global"]["metrics"]["port"])
 
-    # Workers pool
-    workers_count = config["global"]["worker"]["threads"]
-    workers_pool = ThreadPool(processes=workers_count)
-    workers = start_workers(workers_pool, workers_count, queue, config)
+    # Receive syslog messages
+    ip = config["input"]["listen"]["ip"]
+    port = config["input"]["listen"]["port"]
 
-    # Input (single) process
-    reader_pool = ThreadPool(processes=1)
-    reader_options = (queue, config["input"]["listen"]["ip"], config["input"]["listen"]["port"])
-    reader = reader_pool.apply_async(LogProcessor.receive_messages, reader_options)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    #sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 100*1024)
+    sock.bind((ip, port))
 
-    # Control socket
-    socket_path = config["global"]["socket"]
-
-    if os.path.exists(socket_path):
-        os.remove(socket_path)
-
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.bind(socket_path)
-    sock.listen(1)
-
-    # Main loop for control messages
     try:
         while True:
-            try:
-                connection, client_address = sock.accept()
-
-                data = connection.recv(1024)
-                if not data:
-                    continue
-
-                command = data.decode("utf-8").strip()
-
-                if command == "stats":
-                    # Restart workers to receive stats
-                    stop_workers(workers, queue)
-                    stats = LogStat.merge_stats(stats, *receive_stats(workers))
-                    workers = start_workers(workers_pool, workers_count, queue, config)
-
-                    # Return currents stats to client
-                    connection.sendall(str(stats).encode("utf-8"))
-
-                else:
-                    connection.sendall("Unknown command".encode("utf-8"))
-
-                connection.close()
-            except BrokenPipeError:
-                pass # TODO: save error into log
-
+            data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+            entry = utils.parse_entry(data, regex=config["input"]["regex"])
+            stats.insert(entry)
     except (EOFError, KeyboardInterrupt):
         pass
-
-    sock.close()
-    os.remove(socket_path)
-
-    stop_workers(workers, queue)
-    receive_stats(workers) # waiting workers to finish gracefully
 
 if __name__ == "__main__":
     main()

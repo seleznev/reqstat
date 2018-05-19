@@ -18,58 +18,58 @@ import logging as log
 
 from collections import OrderedDict
 
+from prometheus_client import Counter, Gauge
+
 class LogStat():
-    def __init__(self, metrics={}):
-        self.stats = OrderedDict()
-        self.metrics = metrics
-        self.metrics_fields = list(map(lambda m: m["field"], metrics))
+    def __init__(self, config={}):
+        self.metrics = {}
 
-    def insert(self, entry):
-        for metric in self.metrics:
-            m_type = metric["type"]
-            m_field = metric["field"]
-            m_transform = metric["transform"]
+        # Create Prometheus metrics from config
+        for m in config:
+            name = m["name"]
 
-            if not m_field in entry.keys():
-                log.warning("can't find \"{}\" field in log entry: {}".format(m_field, entry))
+            help = ""
+            if "help" in m:
+                help = m["help"]
+
+            type = m["type"]
+            if type != "counter":
+                log.warning("can't create metric for type \"{}\"".format(m["type"]))
                 continue
 
-            if not m_field in self.stats:
-                self.stats[m_field] = {}
+            labels = []
+            transforms = {}
+            for f in m["fields"]:
+                labels += [f["name"]]
 
-            # Transform
-            value = entry[m_field]
-            if m_transform == "http-code":
-                value = LogStat.get_key(value)
+                if "transform" in f:
+                    transforms[f["name"]] = f["transform"]
+                else:
+                    transforms[f["name"]] = None
 
-            # Add into statistics
-            if m_type == "counter":
-                if not str(value) in self.stats[m_field]:
-                    self.stats[m_field][str(value)] = 0
+            self.metrics[name] = {
+                "type": type,
+                "metric": Counter(name, help, labels),
+                "labels": labels,
+                "transforms": transforms,
+            }
 
-                self.stats[m_field][str(value)] += 1
-            else:
-                log.warning("metric for field \"{}\" has unsupported type".format(m_field))
+    def insert(self, entry):
+        for name, metric in self.metrics.items():
+            labels = []
+            for field in metric["labels"]:
+                if not field in entry.keys():
+                    log.warning("can't find \"{}\" field in log entry: {}".format(field, entry))
+                    return None # TODO
 
-    @staticmethod
-    def merge_stats(*stats):
-        result = LogStat()
+                value = entry[field]
+                if field in metric["transforms"]:
+                    if metric["transforms"][field] == "http-code":
+                        value = LogStat.get_key(value)
 
-        for s in list(stats):
-            for k,v in s.stats.items():
-                if not k in result.stats:
-                    result.stats[k] = {}
+                labels.append(value)
 
-                for kk,vv in v.items():
-                    if not kk in result.stats[k]:
-                        result.stats[k][kk] = 0
-
-                    result.stats[k][kk] += s.stats[k][kk]
-
-        return result
-
-    def __str__(self):
-        return json.dumps(self.stats, indent=4, sort_keys=False)
+            self.metrics[name]["metric"].labels(*labels).inc()
 
     @staticmethod
     def get_key(status):

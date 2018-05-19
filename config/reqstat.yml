@@ -1,8 +1,7 @@
 ---
   global:
-    socket: /var/run/reqstat/reqstat.sock
-    worker:
-      threads: 2
+    metrics:
+      port: 9071
   input:
     type: syslog
     listen:
@@ -10,6 +9,9 @@
       port: 2671
     format: combined # or regex
   metrics:
-    - type: counter
-      field: status
-      transform: http-code
+    - name: status
+      describe: "Count requests by HTTP status code"
+      type: counter
+      fields:
+        - name: status
+          transform: http-code
