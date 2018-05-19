@@ -23,80 +23,28 @@ import argparse
 import shutil
 import datetime
 import logging as log
+import urllib.request
+
+from prometheus_client.parser import text_string_to_metric_families
 
 from reqstat import config as rconf
 
-def get_stats(socket_path):
-    if not os.path.exists(socket_path):
-        raise Exception("socket {} is not exists".format(socket_path))
+def get_metrics(port=9071):
+    contents = urllib.request.urlopen("http://localhost:{}/metrics".format(port)).read()
 
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.connect(socket_path)
-    sock.send("stats".encode("utf-8"))
+    metrics = text_string_to_metric_families(contents.decode("utf-8"))
 
-    stats = ""
-    data = sock.recv(1024).decode("utf-8")
-    while data != "":
-        stats = stats + data
-        data = sock.recv(1024*1024).decode("utf-8")
+    return metrics
 
-    sock.close()
+def print_metrics(metrics):
+    for family in metrics:
+      for sample in family.samples:
 
-    stats = json.loads(stats)
+        # Skip default process_* metrics
+        if sample[0].startswith("process_"):
+            continue
 
-    for k in ("2XX", "3XX", "4XX", "499", "5XX", "unknown", "total"):
-        if not k in stats["status"].keys():
-            stats["status"][k] = 0
-
-    return stats
-
-def print_lines_caption(timestamp=False):
-    print("-------------status------------ --err-- -------", end='')
-    if timestamp:
-        print(" -----timestamp-----")
-    else:
-        print()
-
-    print("{:>7} {:>5} {:>5} {:>5} {:>5} {:>7} {:>7}".format("2XX", "3XX", "4XX", "499",
-                                                             "5XX", "unkw", "total"), end='')
-
-    if timestamp:
-        timezone = str(datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo)
-        print(" {:>19}".format(timezone))
-    else:
-        print()
-
-def print_lines_stats(stats, timestamp=False):
-    stats = stats["status"]
-
-    print("{:>7} {:>5} {:>5} {:>5} {:>5} {:>7} {:>7}".format(stats["2XX"], stats["3XX"],
-                                                             stats["4XX"], stats["499"],
-                                                             stats["5XX"], stats["unknown"],
-                                                             stats["total"]), end='')
-    if timestamp:
-        print(" {:>19}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    else:
-        print()
-
-def print_json_stats(stats):
-    print(json.dumps(stats, indent=4, sort_keys=True))
-
-def print_stats(stats, format, options={}):
-    if format == "json":
-        print_json_stats(stats)
-    else:
-        timestamp = False
-        if "timestamp" in options:
-            timestamp = bool(options["timestamp"])
-
-        caption = False
-        if "caption" in options:
-            caption = options["caption"]
-
-        if caption:
-            print_lines_caption(timestamp)
-
-        print_lines_stats(stats, timestamp)
+        print("{0}{1} {2}".format(*sample))
 
 def main():
     log.basicConfig(
@@ -108,12 +56,6 @@ def main():
                         help="print program version")
     parser.add_argument("--config", metavar="CONFIG", type=str, default="/etc/reqstat/reqstat.yml",
                         help="path to config file")
-    parser.add_argument("-o", "--output", choices=["lines", "json"], default="lines",
-                        help="output format: json or lines (vmstat like format)")
-    parser.add_argument("-t", "--timestamp", action="store_true",
-                        help="append timestamp to each line")
-    parser.add_argument("interval", metavar="INTERVAL", type=float, nargs="?", default=0)
-    parser.add_argument("count", metavar="COUNT", type=int, nargs="?", default=0)
     args = parser.parse_args()
 
     try:
@@ -125,30 +67,8 @@ def main():
     t_width, t_height = shutil.get_terminal_size((80, 20))
 
     try:
-        stats1 = get_stats(config["global"]["socket"])
-
-        if args.interval == 0:
-            # Print current raw mertics
-            print_stats(stats1, args.output, {"caption": True, "timestamp": args.timestamp})
-            sys.exit(0)
-
-        line_number = 0
-        while True:
-            time.sleep(args.interval)
-            stats2 = get_stats(config["global"]["socket"])
-
-            for k in stats2["status"].keys():
-                stats1["status"][k] = stats2["status"][k] - stats1["status"][k]
-
-            caption = line_number % t_height == 0
-            print_stats(stats1, args.output, {"caption": caption, "timestamp": args.timestamp})
-
-            line_number += 1
-            if line_number == args.count:
-                break # all requsted lines printed already
-
-            stats1 = stats2
-
+        metrics = get_metrics(config["global"]["metrics"]["port"])
+        print_metrics(metrics)
     except Exception as e:
         log.error(str(e))
     except KeyboardInterrupt:
