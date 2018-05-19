@@ -9,8 +9,8 @@
       port: 2671
     format: combined # or regex
   metrics:
-    - name: status
-      describe: "Count requests by HTTP status code"
+    - name: reqstat_nginx_status
+      help: Count requests by HTTP status code
       type: counter
       fields:
         - name: status
