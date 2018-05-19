@@ -39,3 +39,7 @@ On Debian Stretch:
    ```
    dpkg-buildpackage -uc -us
    ```
+
+## Alternatives
+
+If you looking for production solution to collect nginx metrics try [nginx-module-vts](https://github.com/vozlt/nginx-module-vts), [grok_exporter](https://github.com/fstab/grok_exporter) and [mtail](https://github.com/google/mtail).
