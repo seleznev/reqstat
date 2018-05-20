@@ -18,7 +18,7 @@ import copy
 import logging as log
 from collections import OrderedDict
 
-from prometheus_client import Counter, Gauge
+from prometheus_client import Counter
 
 from reqstat.logtransform import LogTransform
 
@@ -29,15 +29,11 @@ class LogStat():
         # Create Prometheus metrics from config
         for m in config:
             name = m["name"]
+            type = m["type"]
 
             help = ""
             if "help" in m:
                 help = m["help"]
-
-            type = m["type"]
-            if type != "counter":
-                log.warning("can't create metric for type \"{}\"".format(m["type"]))
-                continue
 
             labels = []
             transforms = []
@@ -52,9 +48,15 @@ class LogStat():
                         }
                     })
 
+            if type == "counter":
+                metric = Counter(name, help, labels)
+            else:
+                log.warning("can't create metric for type \"{}\"".format(m["type"]))
+                continue
+
             self.metrics[name] = {
                 "type": type,
-                "metric": Counter(name, help, labels),
+                "metric": metric,
                 "labels": labels,
                 "transforms": transforms,
             }
