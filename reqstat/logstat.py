@@ -14,11 +14,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import json
+import copy
 import logging as log
-
 from collections import OrderedDict
 
 from prometheus_client import Counter, Gauge
+
+from reqstat.logtransform import LogTransform
 
 class LogStat():
     def __init__(self, config={}):
@@ -38,14 +40,17 @@ class LogStat():
                 continue
 
             labels = []
-            transforms = {}
+            transforms = []
             for f in m["fields"]:
                 labels += [f["name"]]
 
                 if "transform" in f:
-                    transforms[f["name"]] = f["transform"]
-                else:
-                    transforms[f["name"]] = None
+                    transforms.append({
+                        "name": f["transform"],
+                        "options": {
+                            "field": f["name"]
+                        }
+                    })
 
             self.metrics[name] = {
                 "type": type,
@@ -54,34 +59,22 @@ class LogStat():
                 "transforms": transforms,
             }
 
-    def insert(self, entry):
+    def insert(self, r_entry):
+        transformers = LogTransform()
+
         for name, metric in self.metrics.items():
+            entry = copy.deepcopy(r_entry) # we need a original entry for every iteraion
+
+            for transform in metric["transforms"]:
+                transformer = transformers[transform["name"]]
+                entry = transformer(entry, transform["options"])
+
             labels = []
             for field in metric["labels"]:
                 if not field in entry.keys():
                     log.warning("can't find \"{}\" field in log entry: {}".format(field, entry))
                     return None # TODO
 
-                value = entry[field]
-                if field in metric["transforms"]:
-                    if metric["transforms"][field] == "http-code":
-                        value = LogStat.get_key(value)
-
-                labels.append(value)
+                labels.append(entry[field])
 
             self.metrics[name]["metric"].labels(*labels).inc()
-
-    @staticmethod
-    def get_key(status):
-        status = int(status)
-
-        if status >= 200 and status <= 299:
-            return "2XX"
-        elif status >= 300 and status <= 399:
-            return "3XX"
-        elif status >= 400 and status <= 499:
-            return "4XX"
-        elif status >= 500 and status <= 599:
-            return "5XX"
-        else:
-            return "unknown"
