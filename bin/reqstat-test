@@ -22,11 +22,18 @@ import timeit
 import random
 import time
 
+import datetime
+import dateutil
+from dateutil.tz import tzlocal
+
 # 5.128.37.112 - - [13/Oct/2017:16:13:09 +0300] "GET / HTTP/1.1" 304 0 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:58.0) Gecko/20100101 Firefox/58.0"
 
 # log_format combined '$remote_addr - $remote_user [$time_local] '
 #                     '"$request" $status $body_bytes_sent '
 #                     '"$http_referer" "$http_user_agent"';
+
+import logging
+import logging.handlers
 
 def get_log_entry():
     address = "{}.{}.{}.{}".format(
@@ -38,42 +45,56 @@ def get_log_entry():
     status = random.choices([200, 301, 302, 499, 500, 502, 504], [10, 2, 2, 1, 1, 1, 1], k=1)[0]
     length = random.randrange(100, 999999)
 
-    return '<190>Oct 22 06:37:12 8ee5523c4a18 nginx: '\
-           '{} - - [22/Oct/2017:06:37:12 +0000] '\
-           '"GET / HTTP/1.0" {} {} "-" "ApacheBench/2.3"'.format(address, status, length)
+    now = datetime.datetime.now(tzlocal())
+    time_local = now.strftime("%d/%b/%Y:%H:%M:%S %z")
+
+    request = "GET / HTTP/2.0"
+    user_agent = "reqstat-test/1.0"
+
+    return '{} - - [{}] "{}" {} {} "-" "{}"'.format(address, time_local, request,
+                                                    status, length, user_agent)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ip", metavar="IP", type=str, default="127.0.0.1",
                         help="IP address to sending syslog messages")
-    parser.add_argument("--port", metavar="PORT", type=int, default=3000,
+    parser.add_argument("--port", metavar="PORT", type=int, default=2671,
                         help="port to sending syslog messages")
-    parser.add_argument("-c", "--count", metavar="COUNT", type=int,
+    parser.add_argument("-c", "--count", metavar="COUNT", type=int, default=100,
                         help="how many messages to send")
     args = parser.parse_args()
 
-    udp_ip = args.ip
-    udp_port = args.port
+    syslog_address = args.ip
+    syslog_port = args.port
     count = args.count
 
+    # Configure logger to send syslog messages to reqstatd
+    # TODO: Sould be options to use stdout (file?) instead of syslog
+    log = logging.getLogger('Logger')
+    #handler = logging.StreamHandler()
+    handler = logging.handlers.SysLogHandler(address=(syslog_address, syslog_port),
+                                             socktype=socket.SOCK_DGRAM)
+    log.addHandler(handler)
+    log.setLevel(logging.DEBUG)
+
+    # Let's generate and send some messages
     start_time = timeit.default_timer()
 
     try:
         for i in range(0, count):
             message = get_log_entry()
+            log.info(message)
 
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
-            sock.sendto(bytes(message, "utf-8"), (udp_ip, udp_port))
-
-            #time.sleep(0.001)
+            time.sleep(0.01) # TODO: should be configurable
     except (KeyboardInterrupt, EOFError):
         print()
 
     elapsed = timeit.default_timer() - start_time
 
-    print("Total requests: {}".format(i))
-    print("Total time: {:.2f} sec".format(elapsed))
-    print("Requests per second: {:.2f}".format(i / elapsed))
+    # Print statistics to stderr
+    print("Total requests: {}".format(i), file=sys.stderr)
+    print("Total time: {:.2f} sec".format(elapsed), file=sys.stderr)
+    print("Requests per second: {:.2f}".format(i / elapsed), file=sys.stderr)
 
 if __name__ == "__main__":
     main()
