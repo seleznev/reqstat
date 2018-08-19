@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import re
 import logging as log
 
 class LogTransform():
@@ -20,6 +21,8 @@ class LogTransform():
 
         if key == "http-code":
             return self.http_code
+        if key == "group-by":
+            return self.group_by
 
         return self.blank
 
@@ -49,5 +52,26 @@ class LogTransform():
             status = "unknown"
 
         entry[options["field"]] = status
+
+        return entry
+
+    @staticmethod
+    def group_by(entry, options={}):
+        if not "field" in options:
+            log.warning("group-by transformer requires \"field\" option")
+            return entry
+
+        if not "rules" in options:
+            log.warning("group-by transformer requires \"rules\" list")
+            return entry
+
+        request_uri = entry[options["field"]]
+
+        for rule in options["rules"]:
+            if re.search(rule["regex"], request_uri):
+                request_uri = rule["name"]
+                break
+
+        entry[options["field"]] = request_uri
 
         return entry

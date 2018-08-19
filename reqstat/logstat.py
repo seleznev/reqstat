@@ -44,7 +44,9 @@ class LogStat():
                     transforms.append({
                         "name": f["transform"],
                         "options": {
-                            "field": f["name"]
+                            "field": f["name"],
+                            # TODO: should convert all additional keys to options
+                            "rules": f["rules"] if "rules" in f else None
                         }
                     })
 
