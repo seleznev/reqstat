@@ -19,13 +19,13 @@ import logging as log
 from reqstat.logentry import LogEntry
 
 def parse_syslog_message(message):
-    regex = re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [\w]+ [\w]+: (?P<data>.*)$")
+    regex = re.compile("^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [^\s]+ [^\s]+: (?P<data>.*)$")
 
     r = re.search(regex, message.decode("utf-8"))
     if r:
         return r.group("data")
     else:
-        raise ValueError("can't parse syslog message: {}".format(data))
+        raise ValueError("can't parse syslog message: {}".format(message))
 
 def parse_entry(item, regex):
     log_regex = re.compile(regex)
