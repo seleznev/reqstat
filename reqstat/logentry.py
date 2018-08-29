@@ -28,18 +28,13 @@ class LogEntry():
         - container - type of container. Can be 'syslog' or None
         """
 
-        # Unpack message
-        if container == 'syslog':
-            data = self._parse_syslog_message(data)
-        elif container is None:
-            pass # do nothing
-        else:
+        if not parser in ['json', 'regex']:
+            raise RuntimeError('LogEntry parser doesn\'t support "{}" parser'.format(parser))
+
+        if not (container == 'syslog' or container is None):
             raise RuntimeError('LogEntry parser doesn\'t support "{}" container'.format(container))
 
-        # Parse
-        if parser == 'json':
-            self.fields = json.loads(data)
-        elif parser == 'regex':
+        if parser == 'regex':
             if isinstance(regex, Pattern):
                 pass # regex already compiled - nothing to do
             elif isinstance(regex, str):
@@ -47,9 +42,12 @@ class LogEntry():
             else:
                 raise RuntimeError('regex type is not valid')
 
-            self.fields = self._parse(data, regex)
-        else:
-            raise RuntimeError('LogEntry parser doesn\'t support "{}" parser'.format(parser))
+        # Unpack message
+        if container == 'syslog':
+            data = self._parse_syslog_message(data)
+
+        # Parse fields
+        self.fields = self._parse(data, parser, regex)
 
     def items(self):
         return self.fields.items()
@@ -69,12 +67,15 @@ class LogEntry():
     def __str__(self):
         return json.dumps(self.fields, indent=4, sort_keys=False)
 
-    def _parse(self, line, regex):
-        r = re.search(regex, line)
-        if r:
-            return r.groupdict()
-        else:
-            raise ValueError('can\'t parse log entry: {}'.format(line))
+    def _parse(self, data, parser='json', regex=None):
+        if parser == 'json':
+            return json.loads(data)
+        elif parser == 'regex':
+            r = re.search(regex, data)
+            if r:
+                return r.groupdict()
+            else:
+                raise ValueError('can\'t parse log entry: {}'.format(data))
 
     def _parse_syslog_message(self, message):
         regex = re.compile('^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [^\s]+ [^\s]+: (?P<data>.*)$')
