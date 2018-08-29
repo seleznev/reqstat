@@ -13,12 +13,43 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import re
 import json
+import re
+
+from typing.re import Pattern
 
 class LogEntry():
-    def __init__(self, line, regex):
-        self.fields = self._parse(line, regex)
+    def __init__(self, data, parser='regex', regex=None, container='syslog'):
+        """Arguments:
+
+        - data - source message (for ex. syslog message with log entry)
+        - parser - parser type. Can be 'json' or 'regex'
+        - regex - regex that will be used to parse line (for 'regex' parser)
+        - container - type of container. Can be 'syslog' or None
+        """
+
+        # Unpack message
+        if container == 'syslog':
+            data = self._parse_syslog_message(data)
+        elif container is None:
+            pass # do nothing
+        else:
+            raise RuntimeError('LogEntry parser doesn\'t support "{}" container'.format(container))
+
+        # Parse
+        if parser == 'json':
+            self.fields = json.loads(data)
+        elif parser == 'regex':
+            if isinstance(regex, Pattern):
+                pass # regex already compiled - nothing to do
+            elif isinstance(regex, str):
+                regex = re.compile(regex)
+            else:
+                raise RuntimeError('regex type is not valid')
+
+            self.fields = self._parse(data, regex)
+        else:
+            raise RuntimeError('LogEntry parser doesn\'t support "{}" parser'.format(parser))
 
     def items(self):
         return self.fields.items()
@@ -43,4 +74,13 @@ class LogEntry():
         if r:
             return r.groupdict()
         else:
-            raise ValueError("can't parse log entry: {}".format(line))
+            raise ValueError('can\'t parse log entry: {}'.format(line))
+
+    def _parse_syslog_message(self, message):
+        regex = re.compile('^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [^\s]+ [^\s]+: (?P<data>.*)$')
+
+        r = re.search(regex, message.decode('utf-8'))
+        if r:
+            return r.group('data')
+        else:
+            raise ValueError('can\'t parse syslog message: {}'.format(message))

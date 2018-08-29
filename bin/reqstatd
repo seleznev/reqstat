@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import re
 import sys
 import time
 import argparse
@@ -23,8 +24,8 @@ import logging as log
 
 from prometheus_client import start_http_server
 
-from reqstat import utils
 from reqstat import config as rconf
+from reqstat.logentry import LogEntry
 from reqstat.logstat import LogStat
 
 def main():
@@ -57,10 +58,25 @@ def main():
     #sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 100*1024)
     sock.bind((ip, port))
 
+    regex = re.compile(config['input']['regex'])
+
     try:
         while True:
+            # Receive log message
             data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
-            entry = utils.parse_entry(data, regex=config["input"]["regex"])
+
+            try:
+                entry = LogEntry(data,
+                                 parser='regex',
+                                 regex=regex,
+                                 container='syslog')
+            except ValueError as e:
+                log.error(e)
+                entry = None
+            except RuntimeError as e:
+                log.error(e)
+                sys.exit(2)
+
             if entry:
                 stats.insert(entry)
     except (EOFError, KeyboardInterrupt):
