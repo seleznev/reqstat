@@ -27,12 +27,19 @@ def parse_syslog_message(message):
     else:
         raise ValueError("can't parse syslog message: {}".format(message))
 
-def parse_entry(item, regex):
+def parse_entry(item, regex, type='syslog'):
     log_regex = re.compile(regex)
+
+    if not type in ['syslog', 'line']:
+        raise ValueError('entry type "{}" is not supported'.format(type))
 
     # Receive log message
     try:
-        line = parse_syslog_message(item)
+        if type == "syslog":
+            line = parse_syslog_message(item)
+        else:
+            line = item
+
         entry = LogEntry(line, log_regex)
     except ValueError as e:
         log.error(e)
