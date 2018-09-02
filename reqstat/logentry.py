@@ -78,7 +78,7 @@ class LogEntry():
                 raise ValueError('can\'t parse log entry: {}'.format(data))
 
     def _parse_syslog_message(self, message):
-        regex = re.compile('^\<[\d]+\>[\w]+ [\d]+ \d\d:\d\d:\d\d [^\s]+ [^\s]+: (?P<data>.*)$')
+        regex = re.compile('^\<[\d]+\>[\w]+[\s]+[\d]+ \d\d:\d\d:\d\d [^\s]+ [^\s]+: (?P<data>.*)$')
 
         r = re.search(regex, message.decode('utf-8'))
         if r:
