@@ -82,7 +82,7 @@ def validate(config):
 
     # Check input format support
     fname = config["input"]["format"]
-    if not fname in ("regex"):
+    if not fname in ("regex", "json"):
         raise ConfigError("\"{}\" for {} is not supported".format(fname, "input.format"))
 
     return config

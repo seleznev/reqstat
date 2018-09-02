@@ -58,7 +58,11 @@ def main():
     #sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 100*1024)
     sock.bind((ip, port))
 
-    regex = re.compile(config['input']['regex'])
+
+    if config['input']['format'] == 'regex':
+        regex = re.compile(config['input']['regex'])
+    else: # json
+        regex = None
 
     try:
         while True:
@@ -67,7 +71,7 @@ def main():
 
             try:
                 entry = LogEntry(data,
-                                 parser='regex',
+                                 parser=config['input']['format'],
                                  regex=regex,
                                  container='syslog')
             except ValueError as e:
